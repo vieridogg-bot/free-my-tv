@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build FreeMyTV.apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 34 tools
+        shell: bash
+        run: |
+          sdkmanager "build-tools;34.0.0" "platforms;android-34"
+          # build.sh selects the newest installed versions. Expose only Android 34.
+          task_sdk="$RUNNER_TEMP/freemytv-sdk"
+          mkdir -p "$task_sdk/build-tools" "$task_sdk/platforms"
+          ln -s "$ANDROID_HOME/build-tools/34.0.0" "$task_sdk/build-tools/34.0.0"
+          ln -s "$ANDROID_HOME/platforms/android-34" "$task_sdk/platforms/android-34"
+
+      - name: Build and verify APK
+        shell: bash
+        env:
+          ANDROID_HOME: ${{ runner.temp }}/freemytv-sdk
+          ANDROID_SDK_ROOT: ${{ runner.temp }}/freemytv-sdk
+        run: |
+          # No private API key is needed for an initial interface test.
+          cp config.example.properties config.properties
+          bash build.sh
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose FreeMyTV.apk
+          "$ANDROID_HOME/build-tools/34.0.0/zipalign" -c -p 4 FreeMyTV.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeMyTV-Android-APK
+          path: FreeMyTV.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # build.sh generates a new signing key on each fresh runner.
+      # This APK is for testing; later builds may require uninstalling this app
+      # before installing again. Never upload the keystore as a public artifact.
