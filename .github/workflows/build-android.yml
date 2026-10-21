@@ -25,6 +25,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Override the default: the obsolete 'tools' package no longer exists.
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android 34 tools
         shell: bash
